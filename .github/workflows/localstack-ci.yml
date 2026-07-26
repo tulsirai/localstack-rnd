@@ -25,17 +25,19 @@ jobs:
         with:
           image-tag: 'latest'
           install-awslocal: 'true'
-          use-pro: 'true'
         env:
           LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
 
       - name: Terraform init
+        working-directory: infra/environments/local
         run: tflocal init
 
       - name: Terraform apply
+        working-directory: infra/environments/local
         run: tflocal apply -auto-approve
 
       - name: Smoke test - POST and GET
+        working-directory: infra/environments/local
         run: |
           URL=$(tflocal output -raw function_url)
           echo "Function URL: $URL"
