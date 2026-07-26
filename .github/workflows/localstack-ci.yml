@@ -1,0 +1,54 @@
+name: LocalStack CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  terraform-localstack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Install tflocal
+        run: pip install terraform-local
+
+      - name: Start LocalStack
+        uses: LocalStack/setup-localstack@v0.3.2
+        with:
+          image-tag: 'latest'
+          install-awslocal: 'true'
+        env:
+          LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
+
+      - name: Terraform init
+        working-directory: infra/environments/local
+        run: tflocal init
+
+      - name: Terraform apply
+        working-directory: infra/environments/local
+        run: tflocal apply -auto-approve
+
+      - name: Smoke test - POST and GET
+        working-directory: infra/environments/local
+        run: |
+          URL=$(tflocal output -raw function_url)
+          echo "Function URL: $URL"
+
+          echo "--- POST ---"
+          curl --retry 3 --retry-delay 2 -sf -X POST "$URL" -H "Content-Type: application/json" -d '{"message":"ci smoke test"}'
+
+          echo "--- GET ---"
+          curl -sf "$URL" | tee response.json
+          grep -q "ci smoke test" response.json
+
+      - name: Export LocalStack logs on failure
+        if: failure()
+        run: docker logs localstack-main || true
