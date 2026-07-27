@@ -1,0 +1,46 @@
+name: Infra Deploy - Dev
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "src/**"
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy-dev:
+    name: Deploy -> dev
+    runs-on: ubuntu-latest
+    environment: dev
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.GH_ACTIONS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.10.5"
+
+      - name: Terraform init
+        working-directory: infra/environments/dev
+        run: terraform init
+
+      - name: Terraform plan
+        working-directory: infra/environments/dev
+        run: terraform plan -out=tfplan
+
+      - name: Terraform apply
+        working-directory: infra/environments/dev
+        run: terraform apply -auto-approve tfplan
