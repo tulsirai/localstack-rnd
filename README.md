@@ -204,10 +204,12 @@ depend on — destroying it first would strand them.
 │   ├── bootstrap/                # Run once per AWS account, by a human
 │   └── environments/
 │       ├── local/                # LocalStack — validated by CI on every PR
-│       └── dev/                  # Real AWS — currently applied manually
+│       └── dev/                  # Real AWS — deployed automatically on merge
 ├── .github/workflows/
-│   └── localstack-ci.yml         # Automated: spins up ephemeral LocalStack
-│                                  # per PR, applies infra/environments/local
+│   ├── localstack-ci.yml         # Automated: spins up ephemeral LocalStack
+│   │                              # per PR, applies infra/environments/local
+│   └── infra-deploy.yml          # Automated: OIDC + terraform apply against
+│                                  # infra/environments/dev, on merge to main
 ├── docs/
 │   └── real-aws-migration-checklist.md   # Forward-looking plan, step by step
 └── README.md                     # This file — current state, not the plan
