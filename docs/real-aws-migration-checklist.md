@@ -218,12 +218,19 @@ README's Bootstrap section (not just patched silently):
 
 ## Step 5 — Steady state
 
-- [ ] LocalStack CI workflow keeps running on every PR (fast, free,
+**Done as of 2026-07-27** — confirmed both pipelines actually run this way,
+not just designed to. `prod` isn't wired into `infra-deploy.yml` yet (no
+`infra/environments/prod` or its own account exist — Step 2.5), so
+"gated by environment protection rules" only applies once that's built;
+`dev` deploys ungated today, correctly, since that's what we configured.
+
+- [x] LocalStack CI workflow keeps running on every PR (fast, free,
       no real credentials) — the pre-flight check
-- [ ] Real-AWS deploy workflow runs on merge to `main` — the actual
-      deployment, gated by environment protection rules
-- [ ] Both pipelines coexist permanently; LocalStack CI is not retired once
-      real AWS exists
+- [x] Real-AWS deploy workflow runs on merge to `main` — the actual
+      deployment (currently `dev` only; `prod` gating applies once Step 2.5
+      lands)
+- [x] Both pipelines coexist permanently; LocalStack CI is not retired now
+      that real AWS exists
 
 ## Things intentionally deferred until there's an actual need
 
