@@ -134,6 +134,46 @@ fails with `EntityAlreadyExists`. That's why `infra/bootstrap/main.tf` uses
 `resource` (a creation) — if you ever rewrite this file, keep it that way,
 or check `aws iam list-open-id-connect-providers` first if you're not sure.
 
+**Second gotcha discovered while building this — the OIDC `sub` claim
+format is not what most docs/tutorials show.** The first deploy attempt
+failed with `Not authorized to perform sts:AssumeRoleWithWebIdentity` even
+though the trust policy looked correct. Decoding the actual token GitHub
+sent (via a temporary debug step in the workflow) revealed the real `sub`
+claim:
+```
+repo:tulsirai@16186091/localstack-rnd@1312311804:environment:dev
+```
+Not the plain `repo:tulsirai/localstack-rnd:environment:dev` the classic
+docs describe — GitHub embeds immutable owner/repo IDs directly in the
+claim using `@ID` suffixes. A trust policy condition of
+`repo:tulsirai/localstack-rnd:*` never matches this, since it requires a
+literal `/` right after `tulsirai`, but the real claim has `@16186091`
+there instead. Fixed by adding a second `StringLike` value covering the ID
+form: `repo:tulsirai@*/localstack-rnd@*:*` (both patterns are kept, since
+`StringLike` matches if *any* listed value matches — defensive in case
+GitHub ever sends the classic format too). If you ever see this exact
+error with a trust policy that "looks right," decode a real token first
+before assuming the policy logic is wrong — see the debug snippet in git
+history (`fix/oidc-sub-claim-format` branch) for how.
+
+**Third gotcha — the GitHub Actions role needed a permission Step 1 never
+tested.** Step 1 validated the *Lambda's own execution role* against real
+AWS. It never exercised the *GitHub Actions deploy role*, since that role
+didn't exist yet. The first real `infra-deploy.yml` run got past OIDC and
+`terraform init`, then failed during `terraform plan`'s state refresh:
+```
+AccessDeniedException: ...GitHubActions is not authorized to perform:
+lambda:GetFunctionCodeSigningConfig
+```
+The AWS provider calls this during every `aws_lambda_function` refresh —
+even when no code-signing config is attached — just to check. It wasn't in
+the original `LambdaManagement` statement's read-action list. Added
+`lambda:GetFunctionCodeSigningConfig` and it resolved. Worth remembering:
+**a new IAM role always needs its own "expect AccessDenied, add the
+missing statement" pass**, even one built from a reviewed, working
+template — Step 1's validation doesn't automatically extend to every role
+that comes after it.
+
 **Bootstrap's own state is local, deliberately** — the one exception to
 "everything real uses remote state." The bucket it creates can't hold its
 own state on its very first run (chicken-and-egg). That local state file is
@@ -193,13 +233,16 @@ entries win (they're the most recently reasoned-through).
 | `infra/bootstrap` (state bucket + OIDC + GitHub Actions role) | ✅ Applied — real state bucket + IAM role exist in account `670069047744` |
 | `dev/backend.tf` (real S3 remote state) | ✅ Applied — state confirmed living in S3 (encrypted, versioned), not on any laptop |
 | GitHub repo wiring (secrets, Environments with approval gates) | ✅ `GH_ACTIONS_ROLE_ARN` secret set; `dev` (no gate) and `prod` (1 required reviewer) Environments created |
-| Automated real-AWS deploy workflow (`infra-deploy.yml`) | ⏳ Not started — this is the actual "CD" piece |
+| Automated real-AWS deploy workflow (`infra-deploy.yml`) | ✅ **Working** — merge to `main` triggers OIDC-authenticated `terraform apply` against `dev`, no human running commands |
 | Code/infra deploy split (`aws-serverless-app` pattern) | ⏳ Not started |
 
-**In plain terms: CI (automated LocalStack validation) exists today. CD
-(automated real-AWS deployment) does not exist yet** — every real-AWS action
-so far has been run manually, by hand, deliberately, as validation before
-letting automation touch a real account.
+**In plain terms: both CI (automated LocalStack validation) and CD
+(automated real-AWS deployment) exist today.** Getting CD working surfaced
+two real gotchas along the way — see the Bootstrap section above for the
+OIDC `sub` claim format issue, and the note below for a missing
+least-privilege permission on the GitHub Actions role itself (distinct
+from the Lambda execution role's permissions, which Step 1 already
+validated) — both are fixed and documented, not just worked around.
 
 ---
 

@@ -179,14 +179,27 @@ automatically, instead of a human running `terraform apply`.
 
 ## Step 4 — Add the real-AWS deploy pipeline (separate workflow, not a modification of the LocalStack CI workflow)
 
-**Partially done as of 2026-07-26** — `infra-deploy.yml` written and YAML
-syntax-validated; not yet pushed/merged/run. Deliberately scoped down: no
-bootstrap-placeholder-zip / `ignore_changes` / separate `app-deploy.yml`
-yet, since this project doesn't have the "frequent code changes
-independent of infra changes" pain that split exists to solve. Terraform
-currently deploys code and infra together in one `apply`, same as the
-manual runs so far — this workflow just automates that, it doesn't change
-the deployment model.
+**Done as of 2026-07-27** — `infra-deploy.yml` merged, triggered on merge
+to `main`, and confirmed **actually working end-to-end**: OIDC role
+assumption → `terraform init` → `plan` → `apply` against `dev`, no human
+running commands. Deliberately scoped down: no bootstrap-placeholder-zip /
+`ignore_changes` / separate `app-deploy.yml` yet, since this project
+doesn't have the "frequent code changes independent of infra changes" pain
+that split exists to solve. Terraform currently deploys code and infra
+together in one `apply`, same as the manual runs so far — this workflow
+just automates that, it doesn't change the deployment model.
+
+Getting here surfaced two real bugs, both fixed and documented in the
+README's Bootstrap section (not just patched silently):
+1. **OIDC `sub` claim format** — GitHub's actual token embeds immutable
+   owner/repo IDs (`repo:tulsirai@16186091/localstack-rnd@1312311804:...`),
+   not the plain `repo:org/repo:...` most docs show. Trust policy needed a
+   second `StringLike` value to match the real format.
+2. **Missing `lambda:GetFunctionCodeSigningConfig`** on the GitHub Actions
+   role — surfaced during `terraform plan`'s state refresh. A reminder that
+   a new IAM role always needs its own least-privilege validation pass,
+   even one built from a working template — Step 1 validated the Lambda's
+   *execution* role, never this *deploy* role, since it didn't exist yet.
 
 - [x] New workflow (`infra-deploy.yml`), triggered on push to `main` under
       **both** `infra/**` and `src/**` (not just `infra/**` — see note

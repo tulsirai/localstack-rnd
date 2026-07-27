@@ -52,11 +52,20 @@ data "aws_iam_policy_document" "github_actions_trust" {
       values   = ["sts.amazonaws.com"]
     }
 
-    # Scope trust to this specific repo only.
+    # Scope trust to this specific repo only. GitHub's actual sub claim
+    # embeds immutable owner/repo IDs (e.g.
+    # "repo:tulsirai@16186091/localstack-rnd@1312311804:environment:dev"),
+    # not the plain "repo:org/repo:*" shown in most docs/tutorials —
+    # confirmed by decoding a real token from this repo. Both patterns are
+    # listed (StringLike matches if ANY value matches) so this keeps working
+    # if GitHub ever sends the classic format too.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
-      values   = ["repo:${var.github_org}/${var.github_repo}:*"]
+      values = [
+        "repo:${var.github_org}/${var.github_repo}:*",
+        "repo:${var.github_org}@*/${var.github_repo}@*:*",
+      ]
     }
   }
 }
@@ -109,6 +118,7 @@ data "aws_iam_policy_document" "github_actions_permissions" {
       "lambda:UntagResource",
       "lambda:GetFunction",
       "lambda:GetFunctionConfiguration",
+      "lambda:GetFunctionCodeSigningConfig",
       "lambda:GetPolicy",
       "lambda:ListVersionsByFunction",
       "lambda:ListTags",
